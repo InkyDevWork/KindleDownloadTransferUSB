@@ -8,7 +8,8 @@ DOWNLOAD_FOLDER = os.path.join(os.getcwd(), "KindleDownloads")  # Save downloads
 
 def download_books():
     with sync_playwright() as p:
-        browser = p.chromium.connect_over_cdp("http://localhost:9222")
+        #browser = p.chromium.connect_over_cdp("http://localhost:9222", timeout=0)
+        browser = p.chromium.connect_over_cdp("ws://localhost:9222/devtools/browser/0bfbe1ce-9fb0-4770-93c6-b3542fcc954a", timeout=0)
         context = browser.contexts[0]
         page = context.new_page()
 
@@ -34,13 +35,12 @@ def download_books():
                         asin = input_id.split(":")[0] if input_id else "UNKNOWN"  # Extract ASIN
                         print(f"ASIN: {asin}")
 
-                    more_actions_btn = book.query_selector('.Dropdown-module_container__S6U18')
+                    more_actions_btn = book.query_selector("[class^='Dropdown-module_container__']")
                     if more_actions_btn:
                         more_actions_btn.click()
                         time.sleep(2)  # Human-like delay
 
-                        usb_selector = f'div[id="DOWNLOAD_AND_TRANSFER_ACTION_{asin}"]'
-                        usb_option = page.query_selector(usb_selector)
+                        usb_option = book.query_selector("span:text('Download & transfer via USB')")
                         if usb_option:
                             usb_option.click()
                             time.sleep(2)
@@ -53,23 +53,26 @@ def download_books():
 
                             # Listen for the download event
                             with page.expect_download() as download_info:
-                                download_selector = f'div[id^="DOWNLOAD_AND_TRANSFER_ACTION_{asin}_CONFIRM"]'
-                                download_btn = page.query_selector(download_selector)
-                                if download_btn:
-                                    download_btn.click()
-                                    time.sleep(3)
+                                parent_div_selector = f'div[id="DOWNLOAD_AND_TRANSFER_DIALOG_{asin}"]'
+                                parent_div = page.query_selector(parent_div_selector)
 
-                                # Save the downloaded file
-                                download = download_info.value
-                                download_path = os.path.join(DOWNLOAD_FOLDER, download.suggested_filename)
-                                download.save_as(download_path)
-                                print(f"Downloaded: {download_path}")
+                                if parent_div:
+                                    download_btn = parent_div.query_selector('div[id$="_CONFIRM"]')
+                                    if download_btn:
+                                        download_btn.click()
+                                        time.sleep(3)
 
-                            # Close the modal by clicking the notification-close span
-                            close_modal = page.query_selector('span#notification-close')
-                            if close_modal:
-                                close_modal.click()
-                                time.sleep(2)  # Short delay after closing
+                                    # Save the downloaded file
+                                    download = download_info.value
+                                    download_path = os.path.join(DOWNLOAD_FOLDER, download.suggested_filename)
+                                    download.save_as(download_path)
+                                    print(f"Downloaded: {download_path}")
+
+                                    # Close the modal by clicking the notification-close span
+                                    close_modal = page.query_selector('span#notification-close')
+                                    if close_modal:
+                                        close_modal.click()
+                                        time.sleep(2)  # Short delay after closing
                 except Exception as e:
                     print(f"Error processing book: {e}")
 
